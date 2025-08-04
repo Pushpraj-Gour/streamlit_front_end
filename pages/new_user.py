@@ -1,8 +1,16 @@
 import streamlit as st
 from utils.api import register_user
+from utils.logger import setup_logger, log_user_action
+import re
+
+# Setup logger
+logger = setup_logger("new_user")
 
 # Page config
 st.set_page_config(page_title="Register", layout="centered")
+
+# Log page access
+logger.info("New user registration page accessed")
 
 # Custom CSS for compact and modern form
 st.markdown("""
@@ -51,35 +59,79 @@ with st.container():
     submit = st.button("🚀 Register", use_container_width=True)
 
     if submit:
-        # Validation
-        if not name.strip() or not email.strip() or not role or not skills.strip() or not education.strip():
-            st.error("❌ Please fill in all required fields: Name, Email, Role, Skills, Education.")
-        else:
-            payload = {
-                "candidate_name": name.strip(),
-                "candidate_email": email.strip(),
-                "role": role,
-                "skills": skills.strip(),
-                "education": education.strip(),
-                "projects": projects.strip() if projects else None,
-                "achievements": achievements.strip() if achievements else None,
-                "experience": experience.strip() if experience else None
-            }
-            res = register_user(payload)
-            if res.ok:
-                st.success("✅ Registration successful! Redirecting...")
-                st.session_state.email = email
-                st.session_state.logged_in = True
-                st.session_state.role = role
-                st.session_state.name = name
-                st.session_state.skills = skills.split(",") if skills else []
-                st.session_state.projects = projects.split(",") if projects else []
-                st.session_state.education = education.split(",") if education else []
-                st.session_state.achievements = achievements.split(",") if achievements else []
-                st.session_state.experience = experience.split(",") if experience else []
-                
-                st.switch_page("pages/dashboard.py")
+        try:
+            logger.info(f"Registration attempt for email: {email.strip()}")
+            log_user_action(logger, "Registration attempt", email.strip())
+            
+            # Enhanced validation
+            validation_errors = []
+            
+            if not name.strip():
+                validation_errors.append("Name is required")
+            if not email.strip():
+                validation_errors.append("Email is required")
+            elif not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email.strip()):
+                validation_errors.append("Please enter a valid email address")
+            if not role:
+                validation_errors.append("Role is required")
+            if not skills.strip():
+                validation_errors.append("Skills are required")
+            if not education.strip():
+                validation_errors.append("Education is required")
+            
+            if validation_errors:
+                logger.warning(f"Registration validation failed for {email.strip()}: {', '.join(validation_errors)}")
+                st.error(f"❌ Please fix the following errors:\n• " + "\n• ".join(validation_errors))
             else:
-                st.error("❌ Registration failed. Please try again later.")
+                payload = {
+                    "candidate_name": name.strip(),
+                    "candidate_email": email.strip(),
+                    "role": role,
+                    "skills": skills.strip(),
+                    "education": education.strip(),
+                    "projects": projects.strip() if projects else None,
+                    "achievements": achievements.strip() if achievements else None,
+                    "experience": experience.strip() if experience else None
+                }
+                
+                logger.info(f"Submitting registration for email: {email.strip()}")
+                res = register_user(payload)
+                
+                if res is None:
+                    logger.error(f"Registration failed - no response from API for email: {email.strip()}")
+                    st.error("❌ Unable to connect to the server. Please try again later.")
+                elif res.ok:
+                    logger.info(f"Registration successful for email: {email.strip()}")
+                    log_user_action(logger, "Registration successful", email.strip(), role=role)
+                    
+                    # Store user data in session
+                    st.session_state.update({
+                        "email": email.strip(),
+                        "logged_in": True,
+                        "role": role,
+                        "name": name.strip(),
+                        "skills": [s.strip() for s in skills.split(",") if s.strip()],
+                        "projects": [p.strip() for p in projects.split(",") if p.strip()] if projects else [],
+                        "education": [e.strip() for e in education.split(",") if e.strip()],
+                        "achievements": [a.strip() for a in achievements.split(",") if a.strip()] if achievements else [],
+                        "experience": [ex.strip() for ex in experience.split(",") if ex.strip()] if experience else []
+                    })
+                    
+                    st.success("✅ Registration successful! Redirecting...")
+                    st.switch_page("pages/dashboard.py")
+                else:
+                    logger.error(f"Registration failed for email {email.strip()}: HTTP {res.status_code}")
+                    try:
+                        error_data = res.json()
+                        error_msg = error_data.get("message", "Unknown error")
+                        logger.error(f"Registration error details: {error_msg}")
+                    except:
+                        logger.error("Could not parse error response from registration API")
+                    
+                    st.error("❌ Registration failed. Please try again later.")
+                    
+        except Exception as e:
+            logger.error(f"Unexpected error during registration for email {email.strip()}: {str(e)}")
+            st.error("❌ An unexpected error occurred during registration. Please try again.")
 
     st.markdown("</div>", unsafe_allow_html=True)

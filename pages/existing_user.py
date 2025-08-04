@@ -1,5 +1,9 @@
 import streamlit as st
 from utils.api import login_user
+from utils.logger import setup_logger, log_user_action
+
+# Setup logger
+logger = setup_logger("existing_user")
 
 # Page setup
 st.set_page_config(
@@ -7,6 +11,9 @@ st.set_page_config(
     page_icon="🔐",
     layout="centered"
 )
+
+# Log page access
+logger.info("Existing user login page accessed")
 
 # Custom CSS
 st.markdown("""
@@ -80,29 +87,52 @@ with st.form("login_form", clear_on_submit=False):
 
 if submitted:
     if not email.strip():
+        logger.warning("Login attempt with empty email")
         st.warning("Please enter a valid email address.")
     else:
-        response = login_user(email)
+        try:
+            logger.info(f"Login attempt for email: {email}")
+            log_user_action(logger, "Login attempt", email)
+            
+            response = login_user(email)
 
-        if response.get("status"):
-            data = response.get("data", {})
+            if response is None:
+                logger.warning(f"Login failed - no response from API for email: {email}")
+                st.error("❌ Unable to connect to the server. Please try again later.")
+            elif not isinstance(response, dict):
+                logger.error(f"Login failed - invalid response format for email: {email}")
+                st.error("❌ Received invalid response from server.")
+            elif response.get("status"):
+                data = response.get("data", {})
+                
+                # Validate required data fields
+                if not data.get("name"):
+                    logger.warning(f"Login successful but missing name data for email: {email}")
+                
+                st.session_state.update({
+                    "email": email,
+                    "logged_in": True,
+                    "role": data.get("role", ""),
+                    "name": data.get("name", "User"),
+                    "skills": data.get("skills", []),
+                    "projects": data.get("projects", []),
+                    "education": data.get("education", []),
+                    "achievements": data.get("achievements", []),
+                    "experience": data.get("experience", [])
+                })
 
-            st.session_state.update({
-                "email": email,
-                "logged_in": True,
-                "role": data.get("role", ""),
-                "name": data.get("name", ""),
-                "skills": data.get("skills", []),
-                "projects": data.get("projects", []),
-                "education": data.get("education", []),
-                "achievements": data.get("achievements", []),
-                "experience": data.get("experience", [])
-            })
-
-            st.success("✅ Logged in successfully. Redirecting...")
-            # st.rerun()  # Optional if switch_page handles this
-
-            st.switch_page("pages/dashboard.py")
-        else:
-            st.error("❌ User not found. Redirecting to registration...")
-            st.switch_page("pages/new_user.py")
+                logger.info(f"Login successful for email: {email}")
+                log_user_action(logger, "Login successful", email, role=data.get("role", ""))
+                
+                st.success("✅ Logged in successfully. Redirecting...")
+                st.switch_page("pages/dashboard.py")
+            else:
+                logger.info(f"Login failed - user not found for email: {email}")
+                log_user_action(logger, "Login failed - user not found", email)
+                st.error("❌ User not found. Redirecting to registration...")
+                st.switch_page("pages/new_user.py")
+                
+        except Exception as e:
+            logger.error(f"Unexpected error during login for email {email}: {str(e)}")
+            st.error("❌ An unexpected error occurred. Please try again later.")
+            # Optionally provide a way to retry or go to registration

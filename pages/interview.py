@@ -12,8 +12,12 @@ import time
 import requests
 from utils.api import get_initial_question, get_next_question, upload_audio_response
 from utils.text_to_speech_util import speak_question
+from utils.logger import setup_logger, log_user_action
 from streamlit_mic_recorder import mic_recorder
 import datetime
+
+# Setup logger
+logger = setup_logger("interview")
 
 # Configuration
 MAX_QUESTIONS = 3
@@ -209,18 +213,40 @@ def display_timer():
 
 def fetch_question(is_first_question=False):
     """Unified function to fetch questions"""
+    email = st.session_state.get('email')
     try:
         if is_first_question:
-            response = get_initial_question(st.session_state.email)
+            logger.info(f"Fetching initial question for user: {email}")
+            response = get_initial_question(email)
         else:
+            logger.info(f"Fetching next question for user: {email}")
             response = get_next_question()
         
-        if response.get("status") != "success":
-            st.markdown('<div class="error-alert">❌ Failed to fetch question. Please try again later.</div>', unsafe_allow_html=True)
+        if response is None:
+            logger.error(f"No response received when fetching question for user: {email}")
+            st.markdown('<div class="error-alert">❌ Unable to connect to server. Please check your connection.</div>', unsafe_allow_html=True)
+            return None
+            
+        if not isinstance(response, dict):
+            logger.error(f"Invalid response format when fetching question for user {email}: {type(response)}")
+            st.markdown('<div class="error-alert">❌ Received invalid response from server.</div>', unsafe_allow_html=True)
             return None
         
-        question = response.get("data", {}).get("question", "")
-        if not question:
+        if response.get("status") != "success":
+            error_msg = response.get("message", "Unknown error")
+            logger.error(f"API error fetching question for user {email}: {error_msg}")
+            st.markdown(f'<div class="error-alert">❌ Failed to fetch question: {error_msg}</div>', unsafe_allow_html=True)
+            return None
+        
+        question_data = response.get("data", {})
+        if not isinstance(question_data, dict):
+            logger.error(f"Invalid question data format for user {email}: {type(question_data)}")
+            st.markdown('<div class="error-alert">❌ Invalid question data received.</div>', unsafe_allow_html=True)
+            return None
+            
+        question = question_data.get("question", "")
+        if not question.strip():
+            logger.error(f"Empty question received for user: {email}")
             st.markdown('<div class="error-alert">❌ No question received from server.</div>', unsafe_allow_html=True)
             return None
         
@@ -228,9 +254,11 @@ def fetch_question(is_first_question=False):
         if is_first_question:
             st.session_state.current_question_index = 1
             st.session_state.total_questions_asked = 1
+            logger.info(f"Initial question loaded for user {email}: {question[:50]}...")
         else:
             st.session_state.current_question_index += 1
             st.session_state.total_questions_asked += 1
+            logger.info(f"Next question ({st.session_state.current_question_index}) loaded for user {email}: {question[:50]}...")
         
         st.session_state.current_question = question
         st.session_state.interview_state = 'asking'
@@ -243,19 +271,28 @@ def fetch_question(is_first_question=False):
             'question_index': st.session_state.current_question_index
         })
         
+        log_user_action(logger, f"Question {st.session_state.current_question_index} fetched", email, 
+                       question_type="initial" if is_first_question else "next")
+        
         return question
         
     except Exception as e:
-        st.markdown(f'<div class="error-alert">❌ Error fetching question: {str(e)}</div>', unsafe_allow_html=True)
+        logger.error(f"Unexpected error fetching question for user {email}: {str(e)}")
+        st.markdown('<div class="error-alert">❌ An unexpected error occurred while fetching the question.</div>', unsafe_allow_html=True)
         return None
 
 def upload_audio_to_backend(audio_bytes, question_text):
     """Sends the recorded audio bytes and question to the backend."""
+    email = st.session_state.get('email')
+    
     if not audio_bytes:
+        logger.warning(f"No audio data to upload for user: {email}")
         st.markdown('<div class="error-alert">No audio data to upload.</div>', unsafe_allow_html=True)
         return None
     
     try:
+        logger.info(f"Uploading audio response for user {email}, question: {question_text[:50]}...")
+        
         files = {'audio_file': ('response.wav', audio_bytes, 'audio/wav')}
         payload = {'question': question_text}
         
@@ -263,17 +300,31 @@ def upload_audio_to_backend(audio_bytes, question_text):
         response = requests.post(url, files=files, data=payload, timeout=30)
         response.raise_for_status()
         
-        return response.json()
+        result = response.json()
+        logger.info(f"Audio upload successful for user: {email}")
+        log_user_action(logger, "Audio response uploaded", email, question_length=len(question_text))
         
-    except requests.exceptions.Timeout:
+        return result
+        
+    except requests.exceptions.Timeout as e:
+        logger.error(f"Upload timeout for user {email}: {str(e)}")
         st.markdown('<div class="error-alert">Upload timeout. Please check your connection and try again.</div>', unsafe_allow_html=True)
         return None
     except requests.exceptions.RequestException as e:
+        logger.error(f"Upload request failed for user {email}: {str(e)}")
         st.markdown(f'<div class="error-alert">Upload Failed: Could not send audio to the backend. Error: {e}</div>', unsafe_allow_html=True)
+        return None
+    except Exception as e:
+        logger.error(f"Unexpected error during upload for user {email}: {str(e)}")
+        st.markdown('<div class="error-alert">An unexpected error occurred during upload.</div>', unsafe_allow_html=True)
         return None
 
 def start_interview():
     """Initialize the interview"""
+    email = st.session_state.get('email')
+    logger.info(f"Starting interview for user: {email}")
+    log_user_action(logger, "Interview started", email)
+    
     add_custom_css()
     
     st.markdown("# 🎤 AI Mock Interview Simulator")
@@ -334,11 +385,11 @@ def start_interview():
 def display_question_and_record():
     """Display current question and handle recording/upload"""
     add_custom_css()
-    
+
     # Enhanced header with better progress visualization
     progress = st.session_state.current_question_index / MAX_QUESTIONS
     st.progress(progress, text=f"Question {st.session_state.current_question_index} of {MAX_QUESTIONS}")
-    
+
     # Question status indicators
     col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
@@ -348,352 +399,77 @@ def display_question_and_record():
             <span>Progress: {st.session_state.current_question_index}/{MAX_QUESTIONS}</span>
         </div>
         """, unsafe_allow_html=True)
-    
+
     with col3:
         if st.button("🛑 End Interview", type="secondary"):
             st.session_state.interview_state = 'complete'
             st.rerun()
-    
-    # Professional question display
+
+    # Show the question block
     st.markdown(f"""
-    <div style="
-        background: linear-gradient(145deg, #ffffff 0%, #f8f9fa 100%);
+    <div style="background: linear-gradient(145deg, #ffffff 0%, #f8f9fa 100%);
         border: 1px solid #e9ecef;
         border-left: 5px solid #667eea;
         border-radius: 15px;
         padding: 2rem;
         margin: 2rem 0;
         box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-        position: relative;
-        overflow: hidden;
-    ">
-        <div style="
-            position: absolute;
-            top: -50px;
-            right: -50px;
-            width: 100px;
-            height: 100px;
-            background: linear-gradient(135deg, #667eea20, #764ba220);
-            border-radius: 50%;
-            opacity: 0.5;
-        "></div>
-        <div style="
-            display: flex;
-            align-items: center;
-            margin-bottom: 1.5rem;
-            position: relative;
-            z-index: 1;
-        ">
-            <div style="
-                background: linear-gradient(135deg, #667eea, #764ba2);
-                color: white;
-                padding: 8px 16px;
-                border-radius: 25px;
-                font-weight: 600;
-                font-size: 0.9rem;
-                margin-right: 1rem;
-                box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
-            ">
-                Question {st.session_state.current_question_index} of {MAX_QUESTIONS}
-            </div>
-            <div style="
-                background: #e8f5e8;
-                color: #2d5a2d;
-                padding: 6px 12px;
-                border-radius: 20px;
-                font-size: 0.8rem;
-                font-weight: 500;
-            ">
-                AI Generated
-            </div>
-        </div>
-        <div style="
-            color: #2c3e50;
-            font-size: 1.2rem;
-            line-height: 1.7;
-            font-weight: 500;
-            position: relative;
-            z-index: 1;
-            padding: 1rem 0;
-            border-left: 3px solid #667eea;
-            padding-left: 1.5rem;
-            margin-left: 1rem;
-            background: linear-gradient(90deg, rgba(102, 126, 234, 0.05) 0%, transparent 100%);
-        ">
+        position: relative;">
+        <div style="color: #2c3e50; font-size: 1.2rem; line-height: 1.7; font-weight: 500;
+            padding: 1rem 0; border-left: 3px solid #667eea; padding-left: 1.5rem; margin-left: 1rem;">
             "{st.session_state.current_question}"
         </div>
-        <div style="
-            display: flex;
-            align-items: center;
-            margin-top: 1.5rem;
-            position: relative;
-            z-index: 1;
-        ">
-            <div style="
-                color: #6c757d;
-                font-size: 0.9rem;
-                display: flex;
-                align-items: center;
-            ">
-                <span style="margin-right: 0.5rem;">💡</span>
-                Take your time to think before responding
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Auto-speak question only once when first displayed
-    if not st.session_state.question_spoken:
-        speak_question(st.session_state.current_question, show_repeat_button=True)
-        st.session_state.question_spoken = True
-    else:
-        # Show repeat button without auto-speaking
-        col1, col2, col3 = st.columns([1, 1, 1])
-        with col2:
-            if st.button("🔊 Repeat Question", use_container_width=True):
-                speak_question(st.session_state.current_question, show_repeat_button=False)
-    
-    st.markdown("---")
-    
-    # Enhanced recording section
-    st.markdown("""
-    <div style="
-        background: linear-gradient(145deg, #f8f9fa 0%, #ffffff 100%);
-        border: 2px solid #e9ecef;
-        border-radius: 20px;
-        padding: 2rem;
-        margin: 2rem 0;
-        text-align: center;
-        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
-        position: relative;
-        overflow: hidden;
-    ">
-        <div style="
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 4px;
-            background: linear-gradient(90deg, #667eea, #764ba2);
-        "></div>
-        <h3 style="
-            margin: 1rem 0;
-            color: #2c3e50;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
-        ">
-            🎙️ Record Your Response
-        </h3>
-        <p style="
-            margin-bottom: 1.5rem;
-            color: #6c757d;
-            font-size: 1rem;
-        ">
-            Click the button below to start recording your answer
-        </p>
     </div>
     """, unsafe_allow_html=True)
 
-    # Recording status and timer container
-    recording_container = st.container()
-    timer_placeholder = st.empty()
-    status_placeholder = st.empty()
-    
-    # Recording component with unique key
+    # Recording component
     recorder_key = f'recorder_{st.session_state.current_question_index}'
-    
-    # Initialize recording state if not exists
     if f'is_recording_{recorder_key}' not in st.session_state:
         st.session_state[f'is_recording_{recorder_key}'] = False
-    
-    # Create columns for centered recording button
-    col1, col2, col3 = st.columns([1, 2, 1])
-    
-    with col2:
+
+    # Speak question only once
+    if not st.session_state.question_spoken:
+        speak_question(st.session_state.current_question, show_repeat_button=False)
+        st.session_state.question_spoken = True
+
+    # Show mic and repeat button
+    col1, col2 = st.columns([1, 1])
+    with col1:
         audio = mic_recorder(
             start_prompt="🎤 Start Recording",
             stop_prompt="⏹️ Stop & Submit",
             just_once=True,
             key=recorder_key
         )
-    
-    # Check if recording is active by monitoring the audio component state
-    current_time = time.time()
-    
-    # If we have audio data, it means recording just stopped
-    if audio and audio.get('bytes'):
-        st.session_state[f'is_recording_{recorder_key}'] = False
-        st.session_state.recording_start_time = None
-    
-    # Handle recording state tracking
-    if recorder_key in st.session_state:
-        # Check if recording button was clicked (this is a workaround since mic_recorder doesn't expose recording state directly)
-        if st.session_state.get(f'is_recording_{recorder_key}', False):
-            if st.session_state.recording_start_time:
-                elapsed = current_time - st.session_state.recording_start_time
-                minutes = int(elapsed // 60)
-                seconds = int(elapsed % 60)
-                
-                # Display timer and recording status
-                timer_placeholder.markdown(f"""
-                <div style="
-                    background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
-                    color: white;
-                    padding: 1.5rem;
-                    border-radius: 15px;
-                    margin: 1rem 0;
-                    text-align: center;
-                    box-shadow: 0 8px 20px rgba(255, 107, 107, 0.3);
-                    animation: pulse 2s infinite;
-                ">
-                    <div style="font-size: 1.2rem; margin-bottom: 0.5rem; font-weight: 600;">
-                        🔴 Recording in Progress
-                    </div>
-                    <div style="font-size: 2.5rem; font-weight: 700; font-family: 'Courier New', monospace;">
-                        {minutes:02d}:{seconds:02d}
-                    </div>
-                    <div style="font-size: 0.9rem; opacity: 0.9; margin-top: 0.5rem;">
-                        Speak clearly into your microphone
-                    </div>
-                </div>
-                
-                <style>
-                @keyframes pulse {{
-                    0% {{ transform: scale(1); }}
-                    50% {{ transform: scale(1.02); }}
-                    100% {{ transform: scale(1); }}
-                }}
-                </style>
-                """, unsafe_allow_html=True)
-                
-                # Auto refresh every second during recording
-                time.sleep(1)
-                st.rerun()
-    
-    # Alternative: JavaScript-based recording timer
-    st.markdown("""
-    <div id="js-timer-container" style="display: none;">
-        <div class="recording-timer">
-            <div style="font-size: 1.2rem; margin-bottom: 0.5rem; font-weight: 600;">
-                🔴 Recording in Progress
-            </div>
-            <div id="js-timer" class="timer-display">00:00</div>
-            <div style="font-size: 0.9rem; opacity: 0.9; margin-top: 0.5rem;">
-                Speak clearly into your microphone
-            </div>
-        </div>
-    </div>
-    
-    <script>
-    let timerInterval;
-    let startTime;
-    let isRecording = false;
-    
-    function startJSTimer() {
-        if (isRecording) return;
-        isRecording = true;
-        startTime = Date.now();
-        document.getElementById('js-timer-container').style.display = 'block';
-        
-        timerInterval = setInterval(function() {
-            const elapsed = Math.floor((Date.now() - startTime) / 1000);
-            const minutes = Math.floor(elapsed / 60);
-            const seconds = elapsed % 60;
-            document.getElementById('js-timer').textContent = 
-                String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
-        }, 1000);
-    }
-    
-    function stopJSTimer() {
-        if (!isRecording) return;
-        isRecording = false;
-        clearInterval(timerInterval);
-        document.getElementById('js-timer-container').style.display = 'none';
-        document.getElementById('js-timer').textContent = '00:00';
-    }
-    
-    // Try to detect microphone access (simplified approach)
-    function checkMicrophoneStatus() {
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-            // This is a simplified detection - in practice, you'd need more sophisticated monitoring
-            const checkInterval = setInterval(function() {
-                // Check if recording button is visible/active (this is a workaround)
-                const micButton = document.querySelector('[data-testid="mic-recorder"]');
-                if (micButton && micButton.textContent.includes('Stop')) {
-                    startJSTimer();
-                    clearInterval(checkInterval);
-                }
-            }, 500);
-            
-            setTimeout(function() {
-                clearInterval(checkInterval);
-            }, 10000); // Stop checking after 10 seconds
-        }
-    }
-    
-    // Auto-start checking when page loads
-    setTimeout(checkMicrophoneStatus, 1000);
-    </script>
-    """, unsafe_allow_html=True)
-    
-    # Manual controls for the JavaScript timer
-    st.markdown("### 🕒 Recording Timer Controls")
-    col1, col2, col3 = st.columns([1, 1, 1])
-    
-    with col1:
-        if st.button("🟢 Start JS Timer", help="Start JavaScript-based timer"):
-            st.markdown('<script>startJSTimer();</script>', unsafe_allow_html=True)
-    
     with col2:
-        if st.button("🔴 Stop JS Timer", help="Stop JavaScript-based timer"):
-            st.markdown('<script>stopJSTimer();</script>', unsafe_allow_html=True)
-    
-    with col3:
-        st.markdown(f"""
-        <div style="
-            background: #e8f4fd;
-            color: #1976d2;
-            padding: 0.5rem 1rem;
-            border-radius: 10px;
-            text-align: center;
-            font-size: 0.9rem;
-            font-weight: 500;
-        ">
-            Manual Timer Available
-        </div>
-        """, unsafe_allow_html=True)
+        if st.button("🔊 Repeat Question", key=f"repeat_{recorder_key}", use_container_width=True):
+            speak_question(st.session_state.current_question, show_repeat_button=False)
 
-    # Process audio when recording stops
+    st.markdown("---")
+
+    # Handle audio response
     if audio and audio.get('bytes'):
-        # Clear timer and recording state
-        timer_placeholder.empty()
-        st.session_state.recording_start_time = None
         st.session_state[f'is_recording_{recorder_key}'] = False
-        
-        # Process the audio immediately
+        st.session_state.recording_start_time = None
+
         with st.spinner("🔄 Processing your response..."):
             upload_response = upload_audio_to_backend(
-                audio['bytes'], 
+                audio['bytes'],
                 st.session_state.current_question
             )
-            
+
             if upload_response:
-                # Update response status
                 if st.session_state.questions_responses:
                     st.session_state.questions_responses[-1]['response_status'] = 'RECORDED'
-                
+
                 st.markdown('<div class="success-alert">✅ Response submitted successfully!</div>', unsafe_allow_html=True)
-                
-                # Check if interview should continue
+
                 if st.session_state.current_question_index >= MAX_QUESTIONS:
                     st.session_state.interview_state = 'complete'
                 else:
                     st.session_state.interview_state = 'loading_next'
-                
-                time.sleep(2)  # Show success message
+
+                time.sleep(2)
                 st.rerun()
             else:
                 st.markdown('<div class="error-alert">❌ Failed to submit response. Please try again.</div>', unsafe_allow_html=True)
@@ -790,31 +566,59 @@ def main():
     )
     
     # Validate user session
-    if 'email' not in st.session_state or not st.session_state.email:
+    email = st.session_state.get('email')
+    if not email or not st.session_state.get('logged_in'):
+        logger.warning("Unauthorized access attempt to interview page")
         st.error("❌ User session not found. Please login again.")
         st.switch_page("home.py")
         return
     
-    # Initialize interview state
-    initialize_interview_state()
+    # Log interview page access
+    logger.info(f"Interview page accessed by user: {email}")
+    log_user_action(logger, "Interview page accessed", email)
     
-    # State machine
-    if st.session_state.interview_state == 'start':
-        start_interview()
-    elif st.session_state.interview_state == 'asking':
-        display_question_and_record()
-    elif st.session_state.interview_state == 'loading_next':
-        load_next_question()
-    elif st.session_state.interview_state == 'complete':
-        handle_interview_completion()
-    else:
-        # Handle unexpected states
-        add_custom_css()
-        st.markdown('<div class="error-alert">❌ Invalid interview state. Restarting...</div>', unsafe_allow_html=True)
-        st.session_state.interview_state = 'start'
-        st.rerun()
+    # Initialize interview state
+    try:
+        initialize_interview_state()
+        logger.debug(f"Interview state initialized for user: {email}")
+    except Exception as e:
+        logger.error(f"Error initializing interview state for user {email}: {str(e)}")
+        st.error("Error initializing interview. Please try again.")
+        return
+    
+    # State machine with error handling
+    try:
+        current_state = st.session_state.get('interview_state', 'start')
+        logger.debug(f"Interview state for user {email}: {current_state}")
+        
+        if current_state == 'start':
+            start_interview()
+        elif current_state == 'asking':
+            display_question_and_record()
+        elif current_state == 'loading_next':
+            load_next_question()
+        elif current_state == 'complete':
+            handle_interview_completion()
+        else:
+            # Handle unexpected states
+            logger.warning(f"Invalid interview state '{current_state}' for user {email}, restarting")
+            add_custom_css()
+            st.markdown('<div class="error-alert">❌ Invalid interview state. Restarting...</div>', unsafe_allow_html=True)
+            st.session_state.interview_state = 'start'
+            st.rerun()
+            
+    except Exception as e:
+        logger.error(f"Unexpected error in interview state machine for user {email}: {str(e)}")
+        st.error("An unexpected error occurred. Please try refreshing the page.")
+        if st.button("🔄 Restart Interview"):
+            # Reset interview state
+            for key in ['interview_state', 'current_question_index', 'current_question', 
+                       'questions_responses', 'total_questions_asked', 'interview_completed', 
+                       'question_spoken', 'recording_start_time']:
+                if key in st.session_state:
+                    del st.session_state[key]
+            st.rerun()
 
 if __name__ == "__main__":
-    # Test session data (should be removed in production)
     st.session_state.logged_in = True #TODO
     main()

@@ -16,9 +16,6 @@ if audio_data:
     filename = datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ".wav"
     filepath = os.path.join(SAVE_DIR, filename)
 
-    with open(filepath, "wb") as f:
-        f.write(audio_data.getvalue())
-
     st.success(f"✅ Recording saved as: {filename}")
     st.audio(audio_data)
 
