@@ -87,7 +87,7 @@ section("💼 Experience", experience)
 # CTA
 st.markdown("---")
 st.markdown("#### Ready for your next challenge?")
-st.page_link("pages/final_3.py", label="Start New Interview")
+st.page_link("pages/interview.py", label="Start New Interview")
 
 
 st.subheader("🗂️ Previous Interviews")

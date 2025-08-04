@@ -9,8 +9,11 @@ email = st.session_state.get("email")
 if not email:
     st.warning("Please log in first.")
     st.stop()
+if st.session_state.interview_state != "completed":
+    st.warning("You can only view feedback after completing the interview, if completed navigating to the dashboard.")
+    st.stop()
 with st.spinner("🔄 Fetching your interview feedback... Please wait."):
-    feedback = get_feedback(st.session_state.get("email", ""))
+    feedback = get_feedback(email)
 
 # --- Fetch Feedback ---
 # feedback = get_feedback()
@@ -89,3 +92,6 @@ for i, q in enumerate(questions, start=1):
 
             st.subheader("✅ Ideal Answer")
             st.info(d.get("ideal_answer", "No ideal answer provided."))
+
+st.session_state.interview_state = "feedback_viewed"
+
