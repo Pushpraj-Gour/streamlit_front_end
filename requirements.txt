@@ -1,0 +1,24 @@
+# Core framework
+streamlit>=1.25.0
+
+# WebRTC for audio input
+streamlit-webrtc>=0.39.0
+
+# Audio processing
+pydub>=0.25.1
+av>=10.0.0
+
+# For handling HTTP requests
+requests>=2.31.0
+
+# Optional: UI enhancements (Markdown, charts)
+streamlit-extras>=0.2.7
+
+# Optional: For loading spinner, toasts, etc.
+streamlit-js-eval>=0.1.5
+
+# System dependencies required for audio processing
+# Make sure these are installed on your OS, not via pip:
+# - ffmpeg
+# - libavdevice / libavformat / libavcodec / libavutil
+
