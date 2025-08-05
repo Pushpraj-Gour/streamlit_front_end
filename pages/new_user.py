@@ -83,6 +83,7 @@ job_roles = [
     "Industrial Engineer",
     "Investment Banker",
     "IT Support Specialist",
+    "Java Developer (Senpai)",
     "Journalist",
     "Lawyer",
     "Lecturer",
