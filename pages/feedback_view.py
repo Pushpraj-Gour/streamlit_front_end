@@ -47,12 +47,12 @@ with st.spinner("Loading feedback..."):
             st.stop()
         
         # Save response for debugging (optional)
-        try:
-            with open("feedback.json", "w", encoding='utf-8') as f:
-                json.dump(response, f, indent=4)
-            logger.debug(f"Feedback response saved to feedback.json for interview {interview_id}")
-        except Exception as save_error:
-            logger.warning(f"Could not save feedback to file: {str(save_error)}")
+        # try:
+        #     with open("feedback.json", "w", encoding='utf-8') as f:
+        #         json.dump(response, f, indent=4)
+        #     logger.debug(f"Feedback response saved to feedback.json for interview {interview_id}")
+        # except Exception as save_error:
+        #     logger.warning(f"Could not save feedback to file: {str(save_error)}")
         
         if not isinstance(response, dict):
             logger.error(f"Invalid response format for interview {interview_id}: {type(response)}")

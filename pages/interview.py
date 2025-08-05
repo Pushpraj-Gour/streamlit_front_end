@@ -21,7 +21,7 @@ logger = setup_logger("interview")
 
 # Configuration
 MAX_QUESTIONS = 3
-BACKEND_URL = "http://127.0.0.1:8081"
+BACKEND_URL = "http://65.0.75.215:8081"
 
 def initialize_interview_state():
     """Initialize session state for interview"""

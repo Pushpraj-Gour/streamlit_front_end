@@ -7,7 +7,7 @@ from .logger import setup_logger, log_api_call
 # Setup logger
 logger = setup_logger("api")
 
-API_BASE = "http://127.0.0.1:8081"
+API_BASE = "http://65.0.75.215:8081"
 
 def _handle_api_response(response: requests.Response, endpoint: str, email: Optional[str] = None) -> Optional[Dict[Any, Any]]:
     """
