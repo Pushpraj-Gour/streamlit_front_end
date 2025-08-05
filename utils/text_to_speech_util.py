@@ -130,14 +130,3 @@ def speak_question(question: str,
             # Show speaking indicator again
             with st.spinner('🔊 Speaking...'):
                 time.sleep(display_duration)
-
-def stop_all_speech():
-    """Stop all current speech synthesis"""
-    stop_html = """
-    <script>
-    if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-    }
-    </script>
-    """
-    components.html(stop_html, height=0)

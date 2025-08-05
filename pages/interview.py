@@ -11,7 +11,7 @@ import streamlit.components.v1 as components
 import time
 import requests
 from utils.api import get_initial_question, get_next_question, upload_audio_response
-from utils.text_to_speech_util import speak_question, stop_all_speech
+from utils.text_to_speech_util import speak_question
 from utils.logger import setup_logger, log_user_action
 from streamlit_mic_recorder import mic_recorder
 import datetime
