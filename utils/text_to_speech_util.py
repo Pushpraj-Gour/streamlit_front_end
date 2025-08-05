@@ -1,79 +1,143 @@
 import streamlit as st
-import pyttsx3
-import threading
+import streamlit.components.v1 as components
 import time
+import uuid
 
 def speak_question(question: str, 
-                  voice_rate: int = 150, 
+                  voice_rate: float = 1.0, 
                   voice_volume: float = 0.9,
-                  display_duration: int = 5,
-                  show_repeat_button: bool = True) -> None:
+                  display_duration: int = 3,
+                  show_repeat_button: bool = True,
+                  auto_speak: bool = True) -> None:
     """
-    Display a question in Streamlit and automatically speak it using text-to-speech.
+    Display a question in Streamlit and speak it using browser-based text-to-speech.
+    Works in Streamlit Cloud and other web deployments.
     
     Usage:
         speak_question("What is your name?")
-        speak_question("How are you?", voice_rate=120, voice_volume=0.8)
+        speak_question("How are you?", voice_rate=0.8, voice_volume=0.9)
     
     Args:
         question (str): The question text to display and speak
-        voice_rate (int): Speech rate (words per minute, default: 150)
+        voice_rate (float): Speech rate (0.1 to 10, default: 1.0)
         voice_volume (float): Voice volume (0.0 to 1.0, default: 0.9)
-        display_duration (int): How long to display the question in seconds (default: 5)
+        display_duration (int): How long to show speaking indicator (default: 3)
         show_repeat_button (bool): Whether to show the repeat button (default: True)
+        auto_speak (bool): Whether to automatically speak on load (default: True)
     """
     
-    def _speak_text(text: str):
-        """Internal function to handle text-to-speech in a separate thread"""
-        try:
-            engine = pyttsx3.init()
-            engine.setProperty('rate', voice_rate)
-            engine.setProperty('volume', voice_volume)
+    # Sanitize the question text for JavaScript
+    clean_question = question.replace('"', '\\"').replace("'", "\\'").replace('\n', ' ')
+    
+    # Generate unique ID for this instance
+    component_id = f"tts_{uuid.uuid4().hex[:8]}"
+    
+    # Create the HTML/JavaScript component for browser TTS
+    tts_html = f"""
+    <div id="{component_id}" style="margin: 10px 0;">
+        <script>
+        (function() {{
+            let isCurrentlySpeaking = false;
             
-            # Optional: Set voice (uncomment and modify as needed)
-            # voices = engine.getProperty('voices')
-            # if voices:
-            #     engine.setProperty('voice', voices[0].id)  # Use first available voice
+            function speakText(text, rate, volume) {{
+                // Stop any current speech
+                if (window.speechSynthesis.speaking) {{
+                    window.speechSynthesis.cancel();
+                }}
+                
+                // Check if speech synthesis is supported
+                if (!('speechSynthesis' in window)) {{
+                    console.warn('Speech Synthesis not supported in this browser');
+                    return;
+                }}
+                
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.rate = rate;
+                utterance.volume = volume;
+                utterance.lang = 'en-US';
+                
+                // Try to use a more natural voice if available
+                const voices = window.speechSynthesis.getVoices();
+                if (voices.length > 0) {{
+                    // Prefer English voices
+                    const englishVoice = voices.find(voice => 
+                        voice.lang.startsWith('en') && 
+                        (voice.name.includes('Google') || voice.name.includes('Microsoft'))
+                    );
+                    if (englishVoice) {{
+                        utterance.voice = englishVoice;
+                    }}
+                }}
+                
+                utterance.onstart = function() {{
+                    isCurrentlySpeaking = true;
+                    console.log('Speech started');
+                }};
+                
+                utterance.onend = function() {{
+                    isCurrentlySpeaking = false;
+                    console.log('Speech ended');
+                }};
+                
+                utterance.onerror = function(event) {{
+                    isCurrentlySpeaking = false;
+                    console.error('Speech error:', event.error);
+                }};
+                
+                window.speechSynthesis.speak(utterance);
+            }}
             
-            engine.say(text)
-            engine.runAndWait()
-            engine.stop()
-        except Exception as e:
-            st.error(f"Error with text-to-speech: {str(e)}")
+            // Auto-speak when component loads
+            {"speakText('" + clean_question + "', " + str(voice_rate) + ", " + str(voice_volume) + ");" if auto_speak else ""}
+            
+            // Make speak function globally available for repeat button
+            window.speakQuestion_{component_id} = function() {{
+                speakText('{clean_question}', {voice_rate}, {voice_volume});
+            }};
+        }})();
+        </script>
+    </div>
+    """
     
-    # Display the question prominently
-    # st.markdown(f"""
-    # <div style="
-    #     background-color: #f0f2f6;
-    #     border-left: 5px solid #4CAF50;
-    #     padding: 20px;
-    #     margin: 10px 0;
-    #     border-radius: 5px;
-    #     font-size: 18px;
-    #     font-weight: bold;
-    #     color: #333;
-    # ">
-    #     🎤 {question}
-    # </div>
-    # """, unsafe_allow_html=True)
+    # Render the TTS component
+    components.html(tts_html, height=0)
     
-    # Start speaking in a separate thread to avoid blocking the UI
-    speak_thread = threading.Thread(target=_speak_text, args=(question,))
-    speak_thread.daemon = True
-    speak_thread.start()
-    
-    # Optional: Show a speaking indicator
-    with st.spinner('🔊 Speaking...'):
-        time.sleep(display_duration)
+    # Show speaking indicator
+    if auto_speak:
+        with st.spinner('🔊 Speaking...'):
+            time.sleep(display_duration)
     
     # Show repeat button if enabled
     if show_repeat_button:
-        if st.button("🔄 Repeat Question", key=f"repeat_{hash(question)}"):
-            # Start speaking again in a separate thread
-            repeat_thread = threading.Thread(target=_speak_text, args=(question,))
-            repeat_thread.daemon = True
-            repeat_thread.start()
+        if st.button("🔄 Repeat Question", key=f"repeat_{component_id}"):
+            # Create repeat TTS component
+            repeat_html = f"""
+            <script>
+            if (typeof window.speakQuestion_{component_id} === 'function') {{
+                window.speakQuestion_{component_id}();
+            }} else {{
+                // Fallback if function not available
+                const utterance = new SpeechSynthesisUtterance('{clean_question}');
+                utterance.rate = {voice_rate};
+                utterance.volume = {voice_volume};
+                utterance.lang = 'en-US';
+                window.speechSynthesis.speak(utterance);
+            }}
+            </script>
+            """
+            components.html(repeat_html, height=0)
             
             # Show speaking indicator again
             with st.spinner('🔊 Speaking...'):
                 time.sleep(display_duration)
+
+def stop_all_speech():
+    """Stop all current speech synthesis"""
+    stop_html = """
+    <script>
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+    }
+    </script>
+    """
+    components.html(stop_html, height=0)
