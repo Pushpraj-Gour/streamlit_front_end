@@ -7,12 +7,22 @@ import type {
 } from "@/types";
 
 /** next.config.ts rewrites /backend/* to the interview API. */
-const BASE = "/backend/interview";
+const BASE = "/backend";
 
 export class ApiError extends Error {
   constructor(message: string, public status?: number) {
     super(message);
   }
+}
+
+/** The API puts tracebacks in `detail` on 5xx, so only surface short, human-readable messages. */
+function errorMessage(status: number, body: any): string {
+  const raw = body?.message ?? body?.detail;
+  if (status === 404) return typeof raw === "string" ? raw : "Not found.";
+  if (status === 400 && typeof raw === "string" && raw.length < 200) return raw;
+  if (status === 422) return "Some of the details look invalid. Please check them and try again.";
+  if (status === 503) return "The service is temporarily unavailable. Please try again shortly.";
+  return "The server hit a problem. Please try again.";
 }
 
 async function request<T = any>(path: string, init?: RequestInit): Promise<T> {
@@ -28,9 +38,7 @@ async function request<T = any>(path: string, init?: RequestInit): Promise<T> {
   } catch {
     /* non-JSON body */
   }
-  if (!res.ok) {
-    throw new ApiError(body?.message ?? body?.detail ?? `Request failed (${res.status})`, res.status);
-  }
+  if (!res.ok) throw new ApiError(errorMessage(res.status, body), res.status);
   return body as T;
 }
 
@@ -52,7 +60,7 @@ export async function login(email: string): Promise<Profile | null> {
       experience: d.experience ?? "",
     };
   } catch (e) {
-    if (e instanceof ApiError && e.status && e.status < 500) return null; // unknown user
+    if (e instanceof ApiError && e.status === 404) return null; // unknown user
     throw e;
   }
 }
@@ -130,5 +138,18 @@ async function feedbackFrom(path: string): Promise<Feedback> {
   return normalize(body.data);
 }
 
-export const getLatestFeedback = (email: string) => feedbackFrom(`/candidate/${enc(email)}/overall/feedback`);
+/**
+ * Asks the API to analyse the interview that just finished. The endpoint also saves it as a new
+ * Interview row, so call it exactly once per interview, then read the saved result by id.
+ * Resolves with the new interview's id.
+ */
+export async function generateFeedback(email: string): Promise<number> {
+  const before = new Set((await getInterviews(email)).map((i) => i.id));
+  const body = await request(`/candidate/${enc(email)}/overall/feedback`);
+  if (body?.status !== "success") throw new ApiError(body?.message ?? "Couldn't generate feedback.");
+  const created = (await getInterviews(email)).find((i) => !before.has(i.id));
+  if (!created) throw new ApiError("Feedback was generated but couldn't be located. Check your dashboard.");
+  return created.id;
+}
+
 export const getInterviewFeedback = (id: string | number) => feedbackFrom(`/${id}/feedback`);

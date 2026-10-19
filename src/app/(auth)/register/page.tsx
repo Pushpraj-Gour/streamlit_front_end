@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { register } from "@/lib/api";
+import { login, register } from "@/lib/api";
 import { JOB_ROLES } from "@/lib/constants";
 import { useSession } from "@/providers/session";
 import { Button } from "@/components/ui/button";
@@ -52,6 +52,12 @@ export default function RegisterPage() {
     setServerError(null);
     setLoading(true);
     try {
+      // Emails are unique on the server; a duplicate would otherwise surface as a generic 500.
+      if (await login(form.email.trim())) {
+        setStep(1);
+        setErrors({ email: "An account with this email already exists. Try signing in." });
+        return;
+      }
       const profile = await register({
         ...form,
         name: form.name.trim(),

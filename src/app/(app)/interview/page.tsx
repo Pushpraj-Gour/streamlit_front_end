@@ -2,16 +2,16 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getFirstQuestion, getNextQuestion, uploadAnswer } from "@/lib/api";
+import { generateFeedback, getFirstQuestion, getNextQuestion, uploadAnswer } from "@/lib/api";
 import { MAX_QUESTIONS } from "@/lib/constants";
 import { useRecorder } from "@/hooks/use-recorder";
 import { useSpeech } from "@/hooks/use-speech";
 import { useSession } from "@/providers/session";
-import { Button, LinkButton } from "@/components/ui/button";
+import { Button, LinkButton, Spinner } from "@/components/ui/button";
 import { Card, Eyebrow, Notice, Progress } from "@/components/ui/primitives";
 import { RecorderButton } from "@/components/features/recorder-button";
 
-type Phase = "intro" | "loading" | "asking" | "submitting" | "done";
+type Phase = "intro" | "loading" | "asking" | "submitting" | "done" | "analysing";
 
 const TIPS = [
   ["Listen", "Each question is read aloud. You can replay it any time."],
@@ -81,6 +81,18 @@ export default function InterviewPage() {
     setPhase("done");
   }
 
+  async function viewFeedback() {
+    if (!profile) return;
+    setError(null);
+    setPhase("analysing");
+    try {
+      router.push(`/feedback/${await generateFeedback(profile.email)}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't generate feedback.");
+      setPhase("done");
+    }
+  }
+
   if (phase === "intro" || phase === "loading") {
     return (
       <div className="animate-rise mx-auto max-w-xl">
@@ -109,6 +121,16 @@ export default function InterviewPage() {
     );
   }
 
+  if (phase === "analysing") {
+    return (
+      <div className="animate-rise mx-auto max-w-xl py-16 text-center">
+        <Spinner className="size-6" />
+        <h1 className="mt-6 font-serif text-3xl tracking-tight">Analysing your answers…</h1>
+        <p className="mt-3 text-muted">This can take up to a minute. Please keep this tab open.</p>
+      </div>
+    );
+  }
+
   if (phase === "done") {
     return (
       <div className="animate-rise mx-auto max-w-xl text-center">
@@ -116,14 +138,19 @@ export default function InterviewPage() {
         <h1 className="mt-3 font-serif text-4xl tracking-tight sm:text-5xl">Nicely done.</h1>
         <p className="mt-4 text-muted">
           {answered > 0
-            ? `You answered ${answered} question${answered === 1 ? "" : "s"}. Your feedback is ready to review.`
+            ? `You answered ${answered} question${answered === 1 ? "" : "s"}. Generate your feedback when you're ready.`
             : "No answers were recorded, so there's nothing to review yet."}
         </p>
+        {error && (
+          <div className="mx-auto mt-6 max-w-md">
+            <Notice>{error}</Notice>
+          </div>
+        )}
         <div className="mt-10 flex flex-wrap justify-center gap-3">
           {answered > 0 ? (
-            <LinkButton href="/feedback/latest" size="lg">
-              View feedback
-            </LinkButton>
+            <Button size="lg" onClick={viewFeedback}>
+              Get my feedback
+            </Button>
           ) : (
             <Button
               size="lg"

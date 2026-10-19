@@ -1,7 +1,7 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
-import { getInterviewFeedback, getLatestFeedback } from "@/lib/api";
+import { getInterviewFeedback } from "@/lib/api";
 import { useSession } from "@/providers/session";
 import { LinkButton, Spinner } from "@/components/ui/button";
 import { Notice } from "@/components/ui/primitives";
@@ -18,7 +18,7 @@ export default function FeedbackPage({ params }: { params: Promise<{ id: string 
   useEffect(() => {
     if (!email) return;
     let live = true;
-    (id === "latest" ? getLatestFeedback(email) : getInterviewFeedback(id))
+    getInterviewFeedback(id)
       .then((f) => live && setFeedback(f))
       .catch((e: Error) => live && setError(e.message));
     return () => {

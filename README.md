@@ -10,7 +10,7 @@ npm install
 npm run dev
 ```
 
-The browser calls `/backend/*`; `next.config.ts` rewrites it to `BACKEND_URL`, so no CORS setup is needed.
+The browser calls `/backend/*`; `next.config.ts` rewrites it to `BACKEND_URL` (+ optional `BACKEND_API_PREFIX`). Backend: `ai-interview-dev`, default port 8081.
 
 ## Structure
 
@@ -32,7 +32,7 @@ src/
 
 ## Flow
 
-Landing → Register / Sign in → Dashboard → Interview (10 spoken questions) → Feedback (`/feedback/latest`, or `/feedback/:id` from history).
+Landing → Register / Sign in → Dashboard → Interview (10 spoken questions) → "Get my feedback" (generated once, saved) → `/feedback/:id`, also reachable from history.
 
 ## Design
 
