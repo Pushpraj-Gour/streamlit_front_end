@@ -1,0 +1,17 @@
+{
+    "status": "success",
+    "interviews": [
+        {
+            "id": 3,
+            "score": 3.0,
+            "summary": "The candidate's performance was poor. Strengths: basic Python data structures and Pandas data cleaning. Weaknesses: fundamental SQL and core NumPy/Pandas concepts. Improvement needed in foundational data libraries and SQL basics.",
+            "created_at": "2025-08-04T12:46:57.035716"
+        },
+        {
+            "id": 4,
+            "score": 6.0,
+            "summary": "The candidate's performance was average to good. Strengths included practical LLM application and FastAPI knowledge. Improvement areas are foundational Python best practices and communication clarity.",
+            "created_at": "2025-08-04T14:54:53.514433"
+        }
+    ]
+}

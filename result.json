@@ -1,0 +1,15 @@
+{
+    "status": "success",
+    "message": "Candidate details fetched successfully.",
+    "data": {
+        "id": 2,
+        "name": "Pushpraj Gour",
+        "email": "rajrjpushp@gmail.com",
+        "role": "AI/ML Engineer",
+        "skills": "Python, C, SQL, TensorFlow, OpenCV, PyTorch, FastAPI, Keras, Scikit-Learn, streamlit, Seaborn, NumPy, Pandas, Matplotlib",
+        "projects": "Project A description, Project B description",
+        "education": "B.Tech in Computer Science from XYZ University",
+        "achievements": "Awarded Best Innovator in 2022, Published research paper on AI",
+        "experience": "2 years at ABC Corp as a Data Scientist, 1 year at DEF Ltd as a Machine Learning Engineer"
+    }
+}

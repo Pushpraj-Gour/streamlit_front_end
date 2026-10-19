@@ -9,9 +9,6 @@ streamlit-mic-recorder>=0.0.2
 pydub>=0.25.1
 av>=10.0.0
 
-# Text-to-speech functionality
-pyttsx3>=2.90
-
 # For handling HTTP requests
 requests>=2.31.0
 

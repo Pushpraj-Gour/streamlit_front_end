@@ -20,8 +20,8 @@ import datetime
 logger = setup_logger("interview")
 
 # Configuration
-MAX_QUESTIONS = 6
-BACKEND_URL = "http://65.0.75.215:8081"
+MAX_QUESTIONS = 10
+BACKEND_URL = "http://localhost:8081"
 
 def initialize_interview_state():
     """Initialize session state for interview"""
