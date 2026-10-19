@@ -1,0 +1,84 @@
+@import "tailwindcss";
+
+/* Palette: warm paper + ink with a single forest-green accent. */
+:root {
+  --bg: #faf8f5;
+  --surface: #ffffff;
+  --ink: #1b1a17;
+  --muted: #6f6b63;
+  --line: #e8e3da;
+  --accent: #2f5d46;
+  --accent-hover: #254c38;
+  --accent-ink: #ffffff;
+  --accent-soft: #e8efe9;
+  --warn: #a76a14;
+  --danger: #b4412f;
+  --danger-soft: #f8e9e5;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-serif-display), ui-serif, Georgia, serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121311;
+    --surface: #1a1b18;
+    --ink: #f0ede6;
+    --muted: #9a968b;
+    --line: #2a2b27;
+    --accent: #86bf9c;
+    --accent-hover: #9ccdb0;
+    --accent-ink: #10201a;
+    --accent-soft: #1e2b23;
+    --warn: #d9a24a;
+    --danger: #e2806d;
+    --danger-soft: #2e1d19;
+  }
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: var(--accent-soft);
+  }
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes ring {
+  0% { transform: scale(1); opacity: 0.5; }
+  100% { transform: scale(1.9); opacity: 0; }
+}
+.animate-rise { animation: rise 0.45s ease-out both; }
+.animate-ring { animation: ring 1.6s ease-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-rise, .animate-ring { animation: none; }
+}
